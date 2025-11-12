@@ -21,6 +21,7 @@ parser.add_argument("--n_channels", type=int, default=1, help="Number of channel
 parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility.")
 
 parser.add_argument("--arch", type=str, default="resnet18", help="Model architecture to use.")
+parser.add_argument("--pretrained", action="store_true", help="Use pretrained weights for the model.")
 parser.add_argument("--batch_size", type=int, default=16, help="Batch size for training.")
 parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs.")
 parser.add_argument("--learning_rate", type=float, default=1e-3, help="Learning rate for optimizer.")
