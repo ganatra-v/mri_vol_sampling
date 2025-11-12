@@ -45,9 +45,9 @@ class VolumeDataset(Dataset):
             file = args.train_file
         else:
             file = args.val_file
-        data = pd.read_csv(file)
-        logging.info(f"loading {len(data)} train volumes")
-        files = data["file"].tolist()
+        csv_data = pd.read_csv(file)
+        logging.info(f"loading {len(csv_data)} train volumes")
+        files = csv_data["file"].tolist()
         self.volumes = []
         for idx, file_ in tqdm(enumerate(files)):
             vol_path = os.path.join(args.data_dir, "singlecoil_train", f"{file_}.h5")
@@ -55,7 +55,7 @@ class VolumeDataset(Dataset):
                 data = f[args.inputs][()]
                 data = standardize_volume(data, args)
                 self.volumes.append(data)
-        self.labels = data["meniscus_tear"].values
+        self.labels = csv_data["meniscus_tear"].values
         logging.info(f"loaded {len(self.volumes)} volumes")
 
 
