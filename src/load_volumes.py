@@ -50,7 +50,7 @@ class VolumeDataset(Dataset):
         files = csv_data["file"].tolist()
         self.volumes = []
         for idx, file_ in tqdm(enumerate(files)):
-            vol_path = os.path.join(args.data_dir, "singlecoil_train", f"{file_}.h5")
+            vol_path = os.path.join(args.data_dir, f"singlecoil_{split}", f"{file_}.h5")
             with h5py.File(vol_path, "r") as f:
                 data = f[args.inputs][()]
                 data = standardize_volume(data, args)
