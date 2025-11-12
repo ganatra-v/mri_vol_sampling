@@ -10,7 +10,7 @@ class VolClsModel(nn.Module):
         self.args = args
         self.model = resnet18(weights="IMAGENET1K_V1" if args.pretrained else None)
         self.input_layer = nn.Conv2d(
-            in_channels=args.vol_input_channels,
+            in_channels=args.n_channels,
             out_channels=3,
             kernel_size=5,
             padding="same"
