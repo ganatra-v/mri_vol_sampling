@@ -16,7 +16,7 @@ class VolClsModel(nn.Module):
             padding="same"
         )
         in_features = self.model.fc.in_features
-        self.mode.fc = nn.Identity()
+        self.model.fc = nn.Identity()
 
         self.fc = nn.Linear(in_features, 1)
     
