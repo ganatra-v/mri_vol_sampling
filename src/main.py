@@ -4,6 +4,8 @@ import numpy as np
 import torch
 import os
 import logging
+from load_volumes import fetch_dataloaders
+from models.vol_cls_model import VolClsModel
 
 parser = argparse.ArgumentParser(description="MRI Volume Sampling")
 parser.add_argument("--dataset", type=str, choices=["knee"], required=True, help="Dataset to use. Currently only 'knee' is supported.")
@@ -15,6 +17,8 @@ parser.add_argument("--output_dir", type=str, required=True, help="Directory to 
 parser.add_argument("--inputs", type=str, choices=["kspace", "reconstruction_esc"], default="kspace", help="Type of input data.")
 parser.add_argument("--slice_sampling_fraction", type=float, default=0.1, help="Fraction of k-space to sample.")
 parser.add_argument("--vol_sampling_fraction", type=float, default=0.5, help="Fraction of volumes to sample.")
+parser.add_argument("--n_channels", type=int, default=1, help="Number of channels in the input data.")
+parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility.")
 
 parser.add_argument("--arch", type=str, default="resnet18", help="Model architecture to use.")
 parser.add_argument("--batch_size", type=int, default=16, help="Batch size for training.")
@@ -55,3 +59,11 @@ if __name__ == "__main__":
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
 
+    # fetch dataloaders
+    train_loader, val_loader = fetch_dataloaders(args)
+
+    model = VolClsModel(args)
+    model = model.cuda() if torch.cuda.is_available() else model
+
+    model.train_model(train_loader)
+    model.evaluate_model(val_loader)
