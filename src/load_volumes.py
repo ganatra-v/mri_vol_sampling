@@ -41,6 +41,8 @@ def fetch_dataloaders(args):
 
 class VolumeDataset(Dataset):
     def __init__(self, split="train", args=None):
+        self.args = args
+        self.split = split
         if split == "train":
             file = args.train_file
         else:
@@ -48,22 +50,20 @@ class VolumeDataset(Dataset):
         csv_data = pd.read_csv(file)
         logging.info(f"loading {len(csv_data)} train volumes")
         files = csv_data["file"].tolist()
-        self.volumes = []
-        for idx, file_ in tqdm(enumerate(files)):
-            vol_path = os.path.join(args.data_dir, f"singlecoil_{split}", f"{file_}.h5")
-            with h5py.File(vol_path, "r") as f:
-                data = f[args.inputs][()]
-                data = standardize_volume(data, args)
-                self.volumes.append(data)
+        self.files = files
         self.labels = csv_data["meniscus_tear"].values
-        logging.info(f"loaded {len(self.volumes)} volumes")
 
 
     def __len__(self):
         return len(self.volumes)
     
     def __getitem__(self, idx):
-        volume = self.volumes[idx]
+        file_ = self.files[idx]
+        vol_path = os.path.join(self.args.data_dir, f"singlecoil_{self.split}", f"{file_}.h5")
+        with h5py.File(vol_path, "r") as f:
+            data = f[self.args.inputs][()]
+            data = standardize_volume(data, self.args)
+
         label = self.labels[idx]
-        volume = torch.tensor(volume)
+        volume = torch.tensor(data, dtype=torch.float32)
         return volume, label
