@@ -26,6 +26,7 @@ parser.add_argument("--batch_size", type=int, default=16, help="Batch size for t
 parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs.")
 parser.add_argument("--learning_rate", type=float, default=1e-3, help="Learning rate for optimizer.")
 parser.add_argument("--weight_decay", type=float, default=1e-5, help="Weight decay for optimizer.")
+parser.add_argument("--eval_interval", type=int, default=5, help="Interval (in epochs) for evaluation on validation set.")
 
 def seed_everything(seed: int = 42):
     random.seed(seed)
@@ -67,4 +68,13 @@ if __name__ == "__main__":
     model = model.cuda() if torch.cuda.is_available() else model
 
     model.train_model(train_loader)
+
+    logging.info("Val set .................................................")
+    model.eval()
     model.evaluate_model(val_loader)
+
+    logging.info("Training and evaluation completed.")
+
+    # save the model
+    model_path = os.path.join(args.outdir, "vol_cls_model.pth")
+    torch.save(model.state_dict(), model_path)

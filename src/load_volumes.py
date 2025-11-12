@@ -55,7 +55,7 @@ class VolumeDataset(Dataset):
 
 
     def __len__(self):
-        return len(self.volumes)
+        return len(self.labels)
     
     def __getitem__(self, idx):
         file_ = self.files[idx]
@@ -64,6 +64,6 @@ class VolumeDataset(Dataset):
             data = f[self.args.inputs][()]
             data = standardize_volume(data, self.args)
 
-        label = self.labels[idx]
         volume = torch.tensor(data, dtype=torch.float32)
+        label = torch.tensor(self.labels[idx], dtype=torch.float32)
         return volume, label

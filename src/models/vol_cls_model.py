@@ -3,6 +3,7 @@ from torchvision.models import resnet18
 import torch.nn as nn
 import torch
 import logging
+from tqdm import tqdm
 
 class VolClsModel(nn.Module):
     def __init__(self, args):
@@ -39,8 +40,9 @@ class VolClsModel(nn.Module):
         criterion = nn.BCELoss()
 
         for epoch in range(1, self.args.epochs + 1):
+            self.train()
             epoch_loss = 0.0
-            for batch_idx, (data, target) in enumerate(train_loader):
+            for batch_idx, (data, target) in tqdm(enumerate(train_loader)):
                 data, target = data.cuda(), target.cuda() if torch.cuda.is_available() else (data, target)
                 optimizer.zero_grad()
                 output = self(data)
@@ -51,6 +53,9 @@ class VolClsModel(nn.Module):
                 epoch_loss += loss.item()
             avg_loss = epoch_loss / len(train_loader)
             logging.info(f"Epoch {epoch}/{self.args.epochs}, Loss: {avg_loss:.4f}")
+            if epoch % self.args.eval_interval == 0:
+                logging.info(f"Evaluation at epoch {epoch}:")
+                self.evaluate_model(train_loader)
     
     def evaluate_model(self, val_loader):
         preds = []
@@ -71,7 +76,6 @@ class VolClsModel(nn.Module):
         sens = recall
         spec = recall_score(targets, preds, pos_label=0)
 
-        logging.info("Val set .................................................")
         logging.info(f"AUC: {auc:.4f}, Acc.: {accuracy:.4f}, Prec.: {precision:.4f}, Rec.: {recall:.4f}, F1: {f1:.4f}, Sens.: {sens:.4f}, Spec.: {spec:.4f}")                
 
                 
