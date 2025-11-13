@@ -63,7 +63,13 @@ class VolumeDataset(Dataset):
         with h5py.File(vol_path, "r") as f:
             data = f[self.args.inputs][()]
             data = standardize_volume(data, self.args)
-
+        
         volume = torch.tensor(data, dtype=torch.float32)
         label = torch.tensor(self.labels[idx], dtype=torch.float32)
+
+        # randomly rotate volume for data augmentation
+        if self.split == "train":
+            k = np.random.randint(0, 4)
+            volume = torch.rot90(volume, k, [1, 2])
+
         return volume, label
