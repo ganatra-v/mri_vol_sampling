@@ -28,6 +28,9 @@ parser.add_argument("--learning_rate", type=float, default=1e-3, help="Learning 
 parser.add_argument("--weight_decay", type=float, default=1e-5, help="Weight decay for optimizer.")
 parser.add_argument("--eval_interval", type=int, default=5, help="Interval (in epochs) for evaluation on validation set.")
 
+parser.add_argument("--resume" action="store_true", help="Resume training from the last checkpoint.")
+parser.add_argument("--checkpoint_path", type=str, default="", help="Path to the checkpoint to resume from.")
+
 def seed_everything(seed: int = 42):
     random.seed(seed)
     np.random.seed(seed)
@@ -66,6 +69,10 @@ if __name__ == "__main__":
 
     model = VolClsModel(args)
     model = model.cuda() if torch.cuda.is_available() else model
+
+    if args.resume and args.checkpoint_path:
+        model.load_state_dict(torch.load(args.checkpoint_path))
+        logging.info(f"Resumed training from checkpoint: {args.checkpoint_path}")
 
     model.train_model(train_loader)
 
