@@ -7,16 +7,16 @@ import numpy as np
 from torch.utils.data import DataLoader, Dataset
 import torch
 
-def standardize_volume(data, args):
-    if data.shape[0] < args.n_channels:
-        deficit = args.n_channels - data.shape[0]
+def standardize_volume(data, n_channels=40):
+    if data.shape[0] < n_channels:
+        deficit = n_channels - data.shape[0]
         pad_before = deficit // 2
         pad_after = deficit - pad_before
         data = np.pad(data, ((pad_before, pad_after), (0, 0), (0, 0)), mode='constant')
-    elif data.shape[0] > args.n_channels:
-        excess = data.shape[0] - args.n_channels
+    elif data.shape[0] > n_channels:
+        excess = data.shape[0] - n_channels
         start_idx = excess // 2
-        end_idx = start_idx + args.n_channels
+        end_idx = start_idx + n_channels
         data = data[start_idx:end_idx, :, :]
     return data
 
@@ -52,7 +52,7 @@ class VolumeDataset(Dataset):
         else:
             file = args.val_file
         csv_data = pd.read_csv(file)
-        logging.info(f"loading {len(csv_data)} train volumes")
+        logging.info(f"loading {len(csv_data)} {split} volumes")
         files = csv_data["file"].tolist()
         self.files = files
         self.labels = csv_data["meniscus_tear"].values
@@ -101,9 +101,20 @@ class SliceDataset(Dataset):
         vol_path = os.path.join(self.args.data_dir, f"singlecoil_{self.split}", f"{file_}.h5")
         with h5py.File(vol_path, "r") as f:
             data = f[self.args.inputs][()]
+            data = standardize_volume(data, n_channels=50)
+
         
         volume = torch.tensor(data, dtype=torch.float32)
         labels = self.grouped_data.get_group(file_)["meniscus_tear"].values
+        diff = volume.shape[0] - len(labels)
+        if diff > 0:
+            if diff % 2 == 0:
+                pad_before = diff // 2
+                pad_after = diff // 2
+            else:
+                pad_before = diff // 2
+                pad_after = diff // 2 + 1
+            labels = np.pad(labels, (pad_before, pad_after), mode='constant')
         label = torch.tensor(labels, dtype=torch.float32)
 
         # randomly rotate volume for data augmentation

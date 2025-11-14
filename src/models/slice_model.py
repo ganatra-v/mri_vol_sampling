@@ -3,6 +3,7 @@ import torch.nn as nn
 from torchvision.models import resnet18
 import logging
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from tqdm import tqdm
 
 class SliceModel(nn.Module):
     def __init__(self, args):
@@ -50,7 +51,7 @@ class SliceModel(nn.Module):
         for epoch in range(self.args.epochs):
             self.train()
             epoch_loss = 0.0
-            for i, (inputs, slice_labels, vol_labels) in enumerate(trainloader):
+            for i, (inputs, slice_labels, vol_labels) in tqdm(enumerate(trainloader)):
                     # inputs has variable length inputs such as 5 x320 x 320, 32 x 320 x 320, 60 x 320 x 320, stack them into -1 x 1 x 320 x 320
                 slices = torch.vstack([inp.unsqueeze(1) for inp in inputs])  # (total_slices, 1, height, width)
                 slice_labels = torch.hstack(slice_labels).unsqueeze(1).float()  # (total_slices, 1)
