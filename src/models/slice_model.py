@@ -40,7 +40,7 @@ class SliceModel(nn.Module):
         x = self.vol_classifier(x)  # (n_batches, 1)
         return x
     
-    def train_slice_model(self, trainloader):
+    def train_model(self, trainloader):
         self.train()
         criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([9]))
         optimizer = torch.optim.Adam(self.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
