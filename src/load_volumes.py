@@ -21,8 +21,12 @@ def standardize_volume(data, args):
     return data
 
 def fetch_dataloaders(args):
-    train_dataset = VolumeDataset(split="train", args=args)
-    val_dataset = VolumeDataset(split="val", args=args)
+    if args.input_data_format == "volumes":
+        train_dataset = VolumeDataset(split="train", args=args)
+        val_dataset = VolumeDataset(split="val", args=args)
+    elif args.input_data_format == "slices":
+        train_dataset = SliceDataset(split="train", args=args)
+        val_dataset = SliceDataset(split="val", args=args)
 
     train_loader = DataLoader(
         train_dataset,
@@ -73,3 +77,41 @@ class VolumeDataset(Dataset):
             volume = torch.rot90(volume, k, [1, 2])
 
         return volume, label
+    
+
+class SliceDataset(Dataset):
+    def __init__(self, split="train", args=None):
+        self.args = args
+        self.split = split
+        if split == "train":
+            file = args.train_file
+        else:
+            file = args.val_file
+        csv_data = pd.read_csv(file)
+        logging.info(f"loading {len(csv_data)} train slices")
+        self.csv_data = csv_data
+        self.grouped_data = csv_data.groupby("file")
+        self.files = csv_data["file"].unique().tolist()
+        
+    def __len__(self):
+        return len(self.files)
+    
+    def __getitem__(self, idx):
+        file_ = self.files[idx]
+        vol_path = os.path.join(self.args.data_dir, f"singlecoil_{self.split}", f"{file_}.h5")
+        with h5py.File(vol_path, "r") as f:
+            data = f[self.args.inputs][()]
+        
+        volume = torch.tensor(data, dtype=torch.float32)
+        labels = self.grouped_data.get_group(file_)["meniscus_tear"].values
+        label = torch.tensor(labels, dtype=torch.float32)
+
+        # randomly rotate volume for data augmentation
+        if self.split == "train":
+            k = np.random.randint(0, 4)
+            volume = torch.rot90(volume, k, [1, 2])
+        
+        assert volume.shape[0] == label.shape[0], "Number of slices and labels must match"
+        volume_label = 1.0 if label.sum() > 0 else 0.0
+        volume_label = torch.tensor(volume_label, dtype=torch.float32)
+        return volume, label, volume_label
