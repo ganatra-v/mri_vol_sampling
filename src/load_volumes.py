@@ -27,6 +27,9 @@ def fetch_dataloaders(args):
     elif args.input_data_format == "slices":
         train_dataset = SliceDataset(split="train", args=args)
         val_dataset = SliceDataset(split="val", args=args)
+    elif args.input_data_format == "slices+volumes":
+        train_dataset = SliceDataset(split="train", args=args)
+        val_dataset = SliceDataset(split="val", args=args)
 
     train_loader = DataLoader(
         train_dataset,

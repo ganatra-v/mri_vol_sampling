@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torchvision.models import resnet18
+from torchvision.models import resnet18, resnet34, resnet50
 import logging
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 from tqdm import tqdm
@@ -9,7 +9,12 @@ class SliceModel(nn.Module):
     def __init__(self, args):
         super(SliceModel, self).__init__()
         self.args = args
-        self.model = resnet18()
+        if args.arch == "resnet18":
+            self.model = resnet18()
+        elif args.arch == "resnet34":
+            self.model = resnet34()
+        elif args.arch == "resnet50":
+            self.model = resnet50()
 
         # Modify the first conv layer to accept n_channels input channels
         outchannels, kernelsize, stride, padding = self.model.conv1.out_channels, self.model.conv1.kernel_size, self.model.conv1.stride, self.model.conv1.padding
@@ -22,9 +27,7 @@ class SliceModel(nn.Module):
 
         if args.input_data_format == "slices+volumes":
             self.attention = nn.Sequential(
-                nn.Linear(num_ftrs, 128),
-                nn.ReLU(),
-                nn.Linear(128, 1),
+                self.slice_classifier,
                 nn.Softmax(dim=1)
             )
             self.vol_classifier = nn.Linear(num_ftrs, 1)  # Binary classification
@@ -43,9 +46,9 @@ class SliceModel(nn.Module):
     
     def train_model(self, trainloader):
         self.train()
-        criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([9]))
+        criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([9]).cuda())
         optimizer = torch.optim.Adam(self.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
-        vol_criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([0.5]))
+        vol_criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([0.6]).cuda())
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         for epoch in range(self.args.epochs):
@@ -54,7 +57,9 @@ class SliceModel(nn.Module):
             for i, (inputs, slice_labels, vol_labels) in tqdm(enumerate(trainloader)):
                     # inputs has variable length inputs such as 5 x320 x 320, 32 x 320 x 320, 60 x 320 x 320, stack them into -1 x 1 x 320 x 320
                 slices = torch.vstack([inp.unsqueeze(1) for inp in inputs])  # (total_slices, 1, height, width)
-                slice_labels = torch.hstack(slice_labels).unsqueeze(1).float()  # (total_slices, 1)
+
+                # use torch.cat instead of torch.stack to avoid extra dimension
+                slice_labels = slice_labels.view(-1, 1).float()  # (total_slices, 1)
 
                 slices, slice_labels = slices.to(device), slice_labels.to(device)
 
