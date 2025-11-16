@@ -47,7 +47,7 @@ class SliceModel(nn.Module):
     def train_model(self, trainloader):
         self.train()
         criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([9]).cuda())
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
         vol_criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([0.6]).cuda())
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

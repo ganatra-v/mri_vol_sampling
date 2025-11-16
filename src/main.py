@@ -85,7 +85,7 @@ if __name__ == "__main__":
 
     logging.info("Val set .................................................")
     model.eval()
-    model.evaluate_model(val_loader)
+    model.eval_model(val_loader)
 
     logging.info("Training and evaluation completed.")
 
