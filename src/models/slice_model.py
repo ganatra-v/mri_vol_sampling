@@ -54,7 +54,7 @@ class SliceModel(nn.Module):
         for epoch in range(self.args.epochs):
             self.train()
             epoch_loss = 0.0
-            for i, (inputs, slice_labels, vol_labels) in tqdm(enumerate(trainloader)):
+            for i, (inputs, slice_labels, vol_labels_) in tqdm(enumerate(trainloader)):
                     # inputs has variable length inputs such as 5 x320 x 320, 32 x 320 x 320, 60 x 320 x 320, stack them into -1 x 1 x 320 x 320
                 slices = torch.vstack([inp.unsqueeze(1) for inp in inputs])  # (total_slices, 1, height, width)
 
@@ -74,7 +74,7 @@ class SliceModel(nn.Module):
                     vol_preds = []
                     vol_labels = []
                     start_idx = 0
-                    for inp, vol_label in zip(inputs, vol_labels):
+                    for inp, vol_label in zip(inputs, vol_labels_):
                         n_slices = inp.shape[0]
                         # reuse slice features from slice_forward
                         vol_slice_features = slice_features[start_idx:start_idx + n_slices]  # (n_slices, feature_dim)
@@ -82,14 +82,18 @@ class SliceModel(nn.Module):
                         # Compute attention weights
                         attn_weights = self.attention(vol_slice_features)  # (n_slices, 1)
                         # Weighted sum of slice features
-                        vol_feature = torch.sum(attn_weights * vol_slice_features, dim=0, keepdim=True)  # (1, feature_dim)
+                        topk_scores, topk_indices = torch.topk(attn_weights.squeeze(), k=10, largest=True)
+                        topk_slice_features = vol_slice_features[topk_indices]
+                        topk_attn_weights = topk_scores.unsqueeze(1)
+                        vol_feature = torch.sum(topk_attn_weights * topk_slice_features, dim=0, keepdim=True)  # (1, feature_dim)
+                        # vol_feature = torch.sum(attn_weights * vol_slice_features, dim=0, keepdim=True)  # (1, feature_dim)
                         vol_logit = self.vol_forward(vol_feature)  # (1, 1)
                         vol_preds.append(vol_logit)
 
                         vol_label = vol_label.to(device)
                         vol_labels.append(vol_label)
-                    vol_preds = torch.vstack(vol_preds)  # (batch_size, 1)
-                    vol_labels = torch.tensor(vol_labels).unsqueeze(1).float()  # (batch_size, 1)
+                    vol_preds = torch.vstack(vol_preds).cuda()  # (batch_size, 1)
+                    vol_labels = torch.tensor(vol_labels).unsqueeze(1).float().cuda()  # (batch_size, 1)
                     vol_loss = vol_criterion(vol_preds, vol_labels)
                     total_loss += vol_loss
                 
@@ -97,7 +101,7 @@ class SliceModel(nn.Module):
                 total_loss.backward()
                 optimizer.step()
                 epoch_loss += total_loss.item()
-                self.eval_model(trainloader)  # evaluate on training set each iteration
+            self.eval_model(trainloader)  # evaluate on training set each iteration
             
             avg_loss = epoch_loss / len(trainloader)
             logging.info(f"epoch {epoch+1}/{self.args.epochs}, loss: {avg_loss:.4f}")
