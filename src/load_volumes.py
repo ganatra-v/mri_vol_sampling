@@ -116,7 +116,13 @@ class SliceDataset(Dataset):
                     center_x - crop_size // 2 : center_x + crop_size // 2,
                     center_y - crop_size // 2 : center_y + crop_size // 2,
                 ]
+            # randomly sampling slices based on vol_sampling_fraction
+            n_slices = data.shape[0]
+            n_sampled_slices = max(1, int(n_slices * self.args.vol_sampling_fraction))
+            sampled_indices = np.sort(np.random.choice(n_slices, n_sampled_slices, replace=False))
+            data = data[sampled_indices]
             data = standardize_volume(data, n_channels=50)
+    
 
         
         volume = torch.tensor(data, dtype=torch.float32)
