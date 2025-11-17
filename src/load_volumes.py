@@ -123,14 +123,14 @@ class SliceDataset(Dataset):
             # zero out non-sampled slices
             mask = np.zeros(n_slices, dtype=bool)
             mask[sampled_indices] = True
-            data = data[mask]
-
+            data[~mask, :, :] = 0
             data = standardize_volume(data, n_channels=50)
     
 
         
         volume = torch.tensor(data, dtype=torch.float32)
         labels = self.grouped_data.get_group(file_)["meniscus_tear"].values
+        labels[~mask] = 0  # set labels of non-sampled slices to 0
         diff = volume.shape[0] - len(labels)
         if diff > 0:
             if diff % 2 == 0:
@@ -140,6 +140,8 @@ class SliceDataset(Dataset):
                 pad_before = diff // 2
                 pad_after = diff // 2 + 1
             labels = np.pad(labels, (pad_before, pad_after), mode='constant')
+        
+
         label = torch.tensor(labels, dtype=torch.float32)
 
         # randomly rotate volume for data augmentation
