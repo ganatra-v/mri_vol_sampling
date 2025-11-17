@@ -28,7 +28,7 @@ class SliceModel(nn.Module):
         if args.input_data_format == "slices+volumes":
             self.attention = nn.Sequential(
                 self.slice_classifier,
-                nn.Softmax(dim=1)
+                nn.Softmax(dim=0)
             )
             self.vol_classifier = nn.Linear(num_ftrs, 1)  # Binary classification
 
@@ -46,9 +46,9 @@ class SliceModel(nn.Module):
     
     def train_model(self, trainloader):
         self.train()
-        criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([9]).cuda())
+        criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([7.5]).cuda())
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
-        vol_criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([0.6]).cuda())
+        vol_criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([0.75]).cuda())
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         for epoch in range(self.args.epochs):
@@ -82,10 +82,12 @@ class SliceModel(nn.Module):
                         # Compute attention weights
                         attn_weights = self.attention(vol_slice_features)  # (n_slices, 1)
                         # Weighted sum of slice features
-                        topk_scores, topk_indices = torch.topk(attn_weights.squeeze(), k=10, largest=True)
+                        topk_scores, topk_indices = torch.topk(attn_weights.squeeze(), k=5, largest=True)
                         topk_slice_features = vol_slice_features[topk_indices]
                         topk_attn_weights = topk_scores.unsqueeze(1)
                         vol_feature = torch.sum(topk_attn_weights * topk_slice_features, dim=0, keepdim=True)  # (1, feature_dim)
+                        # normalize vol_feature
+                        vol_feature = vol_feature / torch.sum(topk_attn_weights)
                         # vol_feature = torch.sum(attn_weights * vol_slice_features, dim=0, keepdim=True)  # (1, feature_dim)
                         vol_logit = self.vol_forward(vol_feature)  # (1, 1)
                         vol_preds.append(vol_logit)
@@ -115,7 +117,9 @@ class SliceModel(nn.Module):
         precision = precision_score(labels, bin_preds, zero_division=0)
         recall = recall_score(labels, bin_preds, zero_division=0)
         f1 = f1_score(labels, bin_preds, zero_division=0)
-        logging.info(f"acc: {accuracy:.4f}, prec: {precision:.4f}, rec: {recall:.4f}, f1: {f1:.4f}, roc_auc: {roc:.4f}")
+        sens = recall
+        spec = recall_score(labels, bin_preds, pos_label=0)
+        logging.info(f"acc: {accuracy:.4f}, prec: {precision:.4f}, rec: {recall:.4f}, f1: {f1:.4f}, roc_auc: {roc:.4f}, sens: {sens:.4f}, spec: {spec:.4f}")
         return accuracy, precision, recall, f1, roc
     
     def eval_model(self, dataloader):
@@ -129,8 +133,9 @@ class SliceModel(nn.Module):
         
         with torch.no_grad():
             for i, (inputs, slice_labels, vol_labels) in enumerate(dataloader):
+                inputs, slice_labels, vol_labels = inputs.cuda(), slice_labels.cuda(), vol_labels.cuda()
                 slices = torch.vstack([inp.unsqueeze(1) for inp in inputs])  # (total_slices, 1, height, width)
-                slice_labels = torch.hstack(slice_labels).unsqueeze(1).float()  # (total_slices, 1)
+                slice_labels = slice_labels.unsqueeze(1).float()  # (total_slices, 1)
                 slice_logits, slice_features = self.slice_forward(slices)
                 slice_probs = torch.sigmoid(slice_logits)
 
@@ -153,12 +158,12 @@ class SliceModel(nn.Module):
 
                     all_vol_labels.append(torch.tensor(vol_labels).unsqueeze(1).float().cpu())
                     all_vol_preds.append(vol_probs.cpu())
-        all_slice_labels = torch.vstack(all_slice_labels).numpy()
-        all_slice_preds = torch.vstack(all_slice_preds).numpy()
+        all_slice_labels = torch.vstack(all_slice_labels).numpy().reshape(-1)
+        all_slice_preds = torch.vstack(all_slice_preds).numpy().reshape(-1)
         logging.info("slice-level metrics.....................")
         self.eval_metrics(all_slice_labels, all_slice_preds)
         if self.args.input_data_format == "slices+volumes":
-            all_vol_labels = torch.vstack(all_vol_labels).numpy()
-            all_vol_preds = torch.vstack(all_vol_preds).numpy()
+            all_vol_labels = torch.vstack(all_vol_labels).numpy().reshape(-1)
+            all_vol_preds = torch.vstack(all_vol_preds).numpy().reshape(-1)
             logging.info("volume-level metrics.....................")
             self.eval_metrics(all_vol_labels, all_vol_preds)
