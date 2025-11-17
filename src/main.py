@@ -16,6 +16,7 @@ parser.add_argument("--val_file", type=str, required=True, help="CSV file listin
 parser.add_argument("--output_dir", type=str, required=True, help="Directory to save outputs.")
 
 parser.add_argument("--inputs", type=str, choices=["kspace", "reconstruction_esc"], default="kspace", help="Type of input data.")
+parser.add_argument("--input_project", type=str, choices=["none", "ifft_preprocess", "kspace_crop"], default="none", help="Preprocessing to apply to input data.")
 parser.add_argument("--input_data_format", type=str, choices=["slices", "volumes", "slices+volumes"], default="volumes", help="Format of input data.")
 parser.add_argument("--slice_sampling_fraction", type=float, default=0.1, help="Fraction of k-space to sample.")
 parser.add_argument("--vol_sampling_fraction", type=float, default=0.5, help="Fraction of volumes to sample.")

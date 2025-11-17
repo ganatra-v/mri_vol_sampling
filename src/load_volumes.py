@@ -104,6 +104,18 @@ class SliceDataset(Dataset):
         vol_path = os.path.join(self.args.data_dir, f"singlecoil_{self.split}", f"{file_}.h5")
         with h5py.File(vol_path, "r") as f:
             data = f[self.args.inputs][()]
+            if self.args.inputs == "kspace" and self.args.input_project == "ifft_preprocess":
+                # apply ifft to k-space data
+                data = np.fft.ifftshift(np.fft.ifft2(np.fft.ifftshift(data, axes=(-2, -1)), norm="ortho"), axes=(-2, -1))
+                data = np.abs(data)
+                # crop the central (320, 320) region
+                center_x, center_y = data.shape[-2] // 2, data.shape[-1] // 2
+                crop_size = 320
+                data = data[
+                    :,
+                    center_x - crop_size // 2 : center_x + crop_size // 2,
+                    center_y - crop_size // 2 : center_y + crop_size // 2,
+                ]
             data = standardize_volume(data, n_channels=50)
 
         
