@@ -4,6 +4,7 @@ from torchvision.models import resnet18, resnet34, resnet50
 import logging
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 from tqdm import tqdm
+import numpy as np
 
 class SliceModel(nn.Module):
     def __init__(self, args):
@@ -122,7 +123,7 @@ class SliceModel(nn.Module):
         logging.info(f"acc: {accuracy:.4f}, prec: {precision:.4f}, rec: {recall:.4f}, f1: {f1:.4f}, roc_auc: {roc:.4f}, sens: {sens:.4f}, spec: {spec:.4f}")
         return accuracy, precision, recall, f1, roc
     
-    def eval_model(self, dataloader):
+    def eval_model(self, dataloader, save_topk_slices=False):
         self.eval()
         all_slice_labels = []
         all_slice_preds = []
@@ -130,6 +131,8 @@ class SliceModel(nn.Module):
         if self.args.input_data_format == "slices+volumes":
             all_vol_labels = []
             all_vol_preds = []
+            if save_topk_slices:
+                topk_slices = []        
         
         with torch.no_grad():
             for i, (inputs, slice_labels, vol_labels) in enumerate(dataloader):
@@ -150,9 +153,18 @@ class SliceModel(nn.Module):
                         vol_slice_features = slice_features[start_idx:start_idx + n_slices]  # (n_slices, feature_dim)
                         start_idx += n_slices
                         attn_weights = self.attention(vol_slice_features)  # (n_slices, 1)
-                        vol_feature = torch.sum(attn_weights * vol_slice_features, dim=0, keepdim=True)  # (1, feature_dim)
+
+                        topk_scores, topk_indices = torch.topk(attn_weights.squeeze(), k=5, largest=True)
+                        topk_slice_features = vol_slice_features[topk_indices]
+                        topk_attn_weights = topk_scores.unsqueeze(1)
+                        vol_feature = torch.sum(topk_attn_weights * topk_slice_features, dim=0, keepdim=True)  # (1, feature_dim)
+                        vol_feature = vol_feature / torch.sum(topk_attn_weights)
+                        # vol_feature = torch.sum(attn_weights * vol_slice_features, dim=0, keepdim=True)  # (1, feature_dim)
                         vol_logit = self.vol_forward(vol_feature)  # (1, 1)
                         vol_preds.append(vol_logit)
+
+                        if save_topk_slices:
+                            topk_slices.append(topk_indices.cpu().numpy())
                     vol_preds = torch.vstack(vol_preds)  # (batch_size, 1)
                     vol_probs = torch.sigmoid(vol_preds)
 
@@ -167,3 +179,11 @@ class SliceModel(nn.Module):
             all_vol_preds = torch.vstack(all_vol_preds).numpy().reshape(-1)
             logging.info("volume-level metrics.....................")
             self.eval_metrics(all_vol_labels, all_vol_preds)
+            if save_topk_slices:
+                topk_slices = np.array(topk_slices)
+                topk_data = {
+                    "vol_labels": all_vol_labels,
+                    "vol_preds": all_vol_preds,
+                    "topk_slices": topk_slices
+                }
+                np.save(f"{self.args.outdir}/topk_slices.npy", topk_data)

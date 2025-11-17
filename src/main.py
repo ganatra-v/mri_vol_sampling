@@ -21,6 +21,8 @@ parser.add_argument("--input_data_format", type=str, choices=["slices", "volumes
 parser.add_argument("--slice_sampling_fraction", type=float, default=0.1, help="Fraction of k-space to sample.")
 parser.add_argument("--vol_sampling_fraction", type=float, default=0.5, help="Fraction of volumes to sample.")
 parser.add_argument("--n_channels", type=int, default=1, help="Number of channels in the input data.")
+parser.add_argument("--save_topk_indices", action="store_true", help="Save top-k slice indices based on attention weights.")
+
 parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility.")
 
 parser.add_argument("--arch", type=str, default="resnet18", help="Model architecture to use.")
@@ -86,7 +88,7 @@ if __name__ == "__main__":
 
     logging.info("Val set .................................................")
     model.eval()
-    model.eval_model(val_loader)
+    model.eval_model(val_loader, save_topk_slices=args.save_topk_indices)
 
     logging.info("Training and evaluation completed.")
 
