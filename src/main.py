@@ -69,6 +69,7 @@ if __name__ == "__main__":
         level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
+    logging.info(vars(args))
 
     # fetch dataloaders
     train_loader, val_loader = fetch_dataloaders(args)
