@@ -85,6 +85,8 @@ if __name__ == "__main__":
         logging.info(f"Resumed training from checkpoint: {args.checkpoint_path}")
 
     model.train_model(train_loader)
+    logging.info("loading best model for evaluation..........")
+    model.load_state_dict(torch.load(os.path.join(args.outdir, "best_model.pth")))
 
     logging.info("Val set .................................................")
     model.eval()

@@ -52,6 +52,8 @@ class SliceModel(nn.Module):
         vol_criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([0.75]).cuda())
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+        best_acc , best_epoch = 0, -1
+
         for epoch in range(self.args.epochs):
             self.train()
             epoch_loss = 0.0
@@ -104,7 +106,13 @@ class SliceModel(nn.Module):
                 total_loss.backward()
                 optimizer.step()
                 epoch_loss += total_loss.item()
-            self.eval_model(trainloader)  # evaluate on training set each iteration
+                print(f"step {i+1}/{len(trainloader)}, loss: {epoch_loss/(i+1):.4f}")
+            acc, prec, rec, f1, roc, sens, spec = self.eval_model(trainloader)  # evaluate on training set each iteration
+            if acc > best_acc:
+                best_acc = acc
+                best_epoch = epoch + 1
+                torch.save(self.state_dict(), f"{self.args.outdir}/best_model.pth")
+                logging.info(f"New best model saved at epoch {best_epoch} with accuracy {best_acc:.4f}")
             
             avg_loss = epoch_loss / len(trainloader)
             logging.info(f"epoch {epoch+1}/{self.args.epochs}, loss: {avg_loss:.4f}")
@@ -121,7 +129,7 @@ class SliceModel(nn.Module):
         sens = recall
         spec = recall_score(labels, bin_preds, pos_label=0)
         logging.info(f"acc: {accuracy:.4f}, prec: {precision:.4f}, rec: {recall:.4f}, f1: {f1:.4f}, roc_auc: {roc:.4f}, sens: {sens:.4f}, spec: {spec:.4f}")
-        return accuracy, precision, recall, f1, roc
+        return accuracy, precision, recall, f1, roc, sens, spec
     
     def eval_model(self, dataloader, save_topk_slices=False):
         self.eval()
@@ -173,12 +181,13 @@ class SliceModel(nn.Module):
         all_slice_labels = torch.vstack(all_slice_labels).numpy().reshape(-1)
         all_slice_preds = torch.vstack(all_slice_preds).numpy().reshape(-1)
         logging.info("slice-level metrics.....................")
-        self.eval_metrics(all_slice_labels, all_slice_preds)
+        acc, prec, rec, f1, roc, sens, spec = self.eval_metrics(all_slice_labels, all_slice_preds)
+        
         if self.args.input_data_format == "slices+volumes":
             all_vol_labels = torch.vstack(all_vol_labels).numpy().reshape(-1)
             all_vol_preds = torch.vstack(all_vol_preds).numpy().reshape(-1)
             logging.info("volume-level metrics.....................")
-            self.eval_metrics(all_vol_labels, all_vol_preds)
+            acc, prec, rec, f1, roc, sens, spec = self.eval_metrics(all_vol_labels, all_vol_preds)
             if save_topk_slices:
                 topk_slices = np.array(topk_slices)
                 topk_data = {
@@ -187,3 +196,4 @@ class SliceModel(nn.Module):
                     "topk_slices": topk_slices
                 }
                 np.save(f"{self.args.outdir}/topk_slices.npy", topk_data)
+        return acc, prec, rec, f1, roc, sens, spec
