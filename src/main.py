@@ -47,7 +47,7 @@ def seed_everything(seed: int = 42):
     torch.backends.cudnn.benchmark = False
 
 def setup_outdir(args):
-    train_details = f"{args.dataset}_{args.inputs}_{args.input_data_format}_{args.input_project if args.input_project != 'none' else ''}vol_sampling_{args.vol_sampling_fraction}_slice_sampling_{args.slice_sampling_fraction}"
+    train_details = f"{args.dataset}_{args.inputs}_{args.input_data_format}_{args.input_project if args.input_project != 'none' else ''}vol_sampling_{args.vol_sampling_fraction}_slice_sampling_{args.slice_sampling_fraction}_slice_loss_lam_{args.slice_loss_lam}/"
     outdir = f"{args.output_dir}/{train_details}/"
     outdir = f"{outdir}/{args.arch}_lr_{args.learning_rate}_bs_{args.batch_size}_{args.epochs}_epochs_wd_{args.weight_decay}/"
     os.makedirs(outdir, exist_ok=True)
