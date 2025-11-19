@@ -92,10 +92,9 @@ if __name__ == "__main__":
 
     logging.info("Val set .................................................")
     model.eval()
-    model.eval_model(val_loader, save_topk_slices=args.save_topk_indices)
+    model.eval_model(val_loader, save_topk_slices=args.save_topk_indices, save_preds=True)
 
     logging.info("Test set ................................................")
     model.eval()
-    model.eval_model(test_loader, save_topk_slices=args.save_topk_indices)
-
+    model.eval_model(test_loader, save_topk_slices=args.save_topk_indices, save_preds=True)
     logging.info("Training and evaluation completed.")

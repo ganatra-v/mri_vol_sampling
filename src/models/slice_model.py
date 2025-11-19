@@ -155,10 +155,13 @@ class SliceModel(nn.Module):
 
                 all_slice_labels.append(slice_labels.cpu())
                 all_slice_preds.append(slice_probs.cpu())
-                filenames.extend([filename] * slice_labels.shape[0])
+
+                # repeat each filename for number of slices without using a loop
+                for f in filename:
+                    filenames.extend([f] * slice_labels.shape[-1])
 
                 if self.args.input_data_format == "slices+volumes":
-                    volume_names.extend([filename])
+                    volume_names.extend(filename)
                     vol_preds = []
                     start_idx = 0
                     for inp, vol_label in zip(inputs, vol_labels):
