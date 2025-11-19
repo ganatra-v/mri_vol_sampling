@@ -13,6 +13,7 @@ parser.add_argument("--dataset", type=str, choices=["knee"], required=True, help
 parser.add_argument("--data_dir", type=str, required=True, help="Path to the dataset directory.")
 parser.add_argument("--train_file", type=str, required=True, help="CSV file listing training files.")
 parser.add_argument("--val_file", type=str, required=True, help="CSV file listing validation files.")
+parser.add_argument("--test_file", type=str, required=True, help="CSV file listing test files.")
 parser.add_argument("--output_dir", type=str, required=True, help="Directory to save outputs.")
 
 parser.add_argument("--inputs", type=str, choices=["kspace", "reconstruction_esc"], default="kspace", help="Type of input data.")
@@ -72,20 +73,20 @@ if __name__ == "__main__":
     logging.info(vars(args))
 
     # fetch dataloaders
-    train_loader, val_loader = fetch_dataloaders(args)
+    train_loader, val_loader, test_loader = fetch_dataloaders(args)
 
     if args.input_data_format == "volumes":
         model = VolClsModel(args)
-        model = model.cuda() if torch.cuda.is_available() else model
     elif args.input_data_format in ["slices", "slices+volumes"]:
         model = SliceModel(args)
-        model = model.cuda() if torch.cuda.is_available() else model
+
+    model = model.cuda() if torch.cuda.is_available() else model
 
     if args.resume and args.checkpoint_path:
         model.load_state_dict(torch.load(args.checkpoint_path))
         logging.info(f"Resumed training from checkpoint: {args.checkpoint_path}")
 
-    model.train_model(train_loader)
+    model.train_model(train_loader, val_loader)
     logging.info("loading best model for evaluation..........")
     model.load_state_dict(torch.load(os.path.join(args.outdir, "best_model.pth")))
 
@@ -93,8 +94,8 @@ if __name__ == "__main__":
     model.eval()
     model.eval_model(val_loader, save_topk_slices=args.save_topk_indices)
 
-    logging.info("Training and evaluation completed.")
+    logging.info("Test set ................................................")
+    model.eval()
+    model.eval_model(test_loader, save_topk_slices=args.save_topk_indices)
 
-    # save the model
-    model_path = os.path.join(args.outdir, "vol_cls_model.pth")
-    torch.save(model.state_dict(), model_path)
+    logging.info("Training and evaluation completed.")

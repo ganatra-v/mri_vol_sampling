@@ -5,6 +5,7 @@ import logging
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 from tqdm import tqdm
 import numpy as np
+import pandas as pd
 
 class SliceModel(nn.Module):
     def __init__(self, args):
@@ -45,7 +46,7 @@ class SliceModel(nn.Module):
         x = self.vol_classifier(x)  # (n_batches, 1)
         return x
     
-    def train_model(self, trainloader):
+    def train_model(self, trainloader, valloader):
         self.train()
         criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([7.5]).cuda())
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
@@ -57,7 +58,7 @@ class SliceModel(nn.Module):
         for epoch in range(self.args.epochs):
             self.train()
             epoch_loss = 0.0
-            for i, (inputs, slice_labels, vol_labels_) in tqdm(enumerate(trainloader)):
+            for i, (_, inputs, slice_labels, vol_labels_) in tqdm(enumerate(trainloader)):
                     # inputs has variable length inputs such as 5 x320 x 320, 32 x 320 x 320, 60 x 320 x 320, stack them into -1 x 1 x 320 x 320
                 slices = torch.vstack([inp.unsqueeze(1) for inp in inputs])  # (total_slices, 1, height, width)
 
@@ -107,7 +108,7 @@ class SliceModel(nn.Module):
                 optimizer.step()
                 epoch_loss += total_loss.item()
                 print(f"step {i+1}/{len(trainloader)}, loss: {epoch_loss/(i+1):.4f}")
-            acc, prec, rec, f1, roc, sens, spec = self.eval_model(trainloader)  # evaluate on training set each iteration
+            acc, prec, rec, f1, roc, sens, spec = self.eval_model(valloader)  # evaluate on validation set each iteration
             if acc > best_acc:
                 best_acc = acc
                 best_epoch = epoch + 1
@@ -131,19 +132,21 @@ class SliceModel(nn.Module):
         logging.info(f"acc: {accuracy:.4f}, prec: {precision:.4f}, rec: {recall:.4f}, f1: {f1:.4f}, roc_auc: {roc:.4f}, sens: {sens:.4f}, spec: {spec:.4f}")
         return accuracy, precision, recall, f1, roc, sens, spec
     
-    def eval_model(self, dataloader, save_topk_slices=False):
+    def eval_model(self, dataloader, save_topk_slices=False, save_preds=False):
         self.eval()
+        filenames = []
         all_slice_labels = []
         all_slice_preds = []
 
         if self.args.input_data_format == "slices+volumes":
+            volume_names = []
             all_vol_labels = []
             all_vol_preds = []
             if save_topk_slices:
                 topk_slices = []        
         
         with torch.no_grad():
-            for i, (inputs, slice_labels, vol_labels) in enumerate(dataloader):
+            for i, (filename, inputs, slice_labels, vol_labels) in enumerate(dataloader):
                 inputs, slice_labels, vol_labels = inputs.cuda(), slice_labels.cuda(), vol_labels.cuda()
                 slices = torch.vstack([inp.unsqueeze(1) for inp in inputs])  # (total_slices, 1, height, width)
                 slice_labels = slice_labels.unsqueeze(1).float()  # (total_slices, 1)
@@ -152,8 +155,10 @@ class SliceModel(nn.Module):
 
                 all_slice_labels.append(slice_labels.cpu())
                 all_slice_preds.append(slice_probs.cpu())
+                filenames.extend([filename] * slice_labels.shape[0])
 
                 if self.args.input_data_format == "slices+volumes":
+                    volume_names.extend([filename])
                     vol_preds = []
                     start_idx = 0
                     for inp, vol_label in zip(inputs, vol_labels):
@@ -180,6 +185,14 @@ class SliceModel(nn.Module):
                     all_vol_preds.append(vol_probs.cpu())
         all_slice_labels = torch.vstack(all_slice_labels).numpy().reshape(-1)
         all_slice_preds = torch.vstack(all_slice_preds).numpy().reshape(-1)
+        if save_preds:
+            slice_data = {
+                "filenames": filenames,
+                "slice_labels": all_slice_labels,
+                "slice_preds": all_slice_preds
+            }
+            slice_data = pd.DataFrame(slice_data)
+            slice_data.to_csv(f"{self.args.outdir}/slice_predictions.csv", index=False)
         logging.info("slice-level metrics.....................")
         acc, prec, rec, f1, roc, sens, spec = self.eval_metrics(all_slice_labels, all_slice_preds)
         
@@ -196,4 +209,12 @@ class SliceModel(nn.Module):
                     "topk_slices": topk_slices
                 }
                 np.save(f"{self.args.outdir}/topk_slices.npy", topk_data)
+            if save_preds:
+                vol_data = {
+                    "filenames": volume_names,
+                    "vol_labels": all_vol_labels,
+                    "vol_preds": all_vol_preds
+                }
+                vol_data = pd.DataFrame(vol_data)
+                vol_data.to_csv(f"{self.args.outdir}/volume_predictions.csv", index=False)
         return acc, prec, rec, f1, roc, sens, spec

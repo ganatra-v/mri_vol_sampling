@@ -24,12 +24,11 @@ def fetch_dataloaders(args):
     if args.input_data_format == "volumes":
         train_dataset = VolumeDataset(split="train", args=args)
         val_dataset = VolumeDataset(split="val", args=args)
-    elif args.input_data_format == "slices":
+        test_dataset = VolumeDataset(split="test", args=args)
+    elif args.input_data_format in ["slices", "slices+volumes"]:
         train_dataset = SliceDataset(split="train", args=args)
         val_dataset = SliceDataset(split="val", args=args)
-    elif args.input_data_format == "slices+volumes":
-        train_dataset = SliceDataset(split="train", args=args)
-        val_dataset = SliceDataset(split="val", args=args)
+        test_dataset = SliceDataset(split="test", args=args)
 
     train_loader = DataLoader(
         train_dataset,
@@ -44,7 +43,13 @@ def fetch_dataloaders(args):
         shuffle=False,
         num_workers=4
     )
-    return train_loader, val_loader
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=8,
+        shuffle=False,
+        num_workers=4
+    )
+    return train_loader, val_loader, test_loader
 
 class VolumeDataset(Dataset):
     def __init__(self, split="train", args=None):
@@ -52,8 +57,12 @@ class VolumeDataset(Dataset):
         self.split = split
         if split == "train":
             file = args.train_file
-        else:
+        elif split == "val":
             file = args.val_file
+        elif split == "test":
+            file = args.test_file
+        else:
+            raise ValueError("Invalid split name")
         csv_data = pd.read_csv(file)
         logging.info(f"loading {len(csv_data)} {split} volumes")
         files = csv_data["file"].tolist()
@@ -66,7 +75,7 @@ class VolumeDataset(Dataset):
     
     def __getitem__(self, idx):
         file_ = self.files[idx]
-        vol_path = os.path.join(self.args.data_dir, f"singlecoil_{self.split}", f"{file_}.h5")
+        vol_path = os.path.join(self.args.data_dir, f"{file_}.h5")
         with h5py.File(vol_path, "r") as f:
             data = f[self.args.inputs][()]
             data = standardize_volume(data, self.args)
@@ -79,7 +88,7 @@ class VolumeDataset(Dataset):
             k = np.random.randint(0, 4)
             volume = torch.rot90(volume, k, [1, 2])
 
-        return volume, label
+        return file_, volume, label
     
 
 class SliceDataset(Dataset):
@@ -88,10 +97,14 @@ class SliceDataset(Dataset):
         self.split = split
         if split == "train":
             file = args.train_file
-        else:
+        elif split == "val":
             file = args.val_file
+        elif split == "test":
+            file = args.test_file
+        else:
+            raise ValueError("Invalid split name")
         csv_data = pd.read_csv(file)
-        logging.info(f"loading {len(csv_data)} train slices")
+        logging.info(f"loading {len(csv_data)} {split} slices")
         self.csv_data = csv_data
         self.grouped_data = csv_data.groupby("file")
         self.files = csv_data["file"].unique().tolist()
@@ -101,7 +114,7 @@ class SliceDataset(Dataset):
     
     def __getitem__(self, idx):
         file_ = self.files[idx]
-        vol_path = os.path.join(self.args.data_dir, f"singlecoil_{self.split}", f"{file_}.h5")
+        vol_path = os.path.join(self.args.data_dir, f"{file_}.h5")
         with h5py.File(vol_path, "r") as f:
             data = f[self.args.inputs][()]
             if self.args.inputs == "kspace" and self.args.input_project == "ifft_preprocess":
@@ -152,4 +165,4 @@ class SliceDataset(Dataset):
         assert volume.shape[0] == label.shape[0], "Number of slices and labels must match"
         volume_label = 1.0 if label.sum() > 0 else 0.0
         volume_label = torch.tensor(volume_label, dtype=torch.float32)
-        return volume, label, volume_label
+        return file_, volume, label, volume_label
