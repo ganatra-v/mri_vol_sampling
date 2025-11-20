@@ -111,7 +111,7 @@ class SliceDataset(Dataset):
     
     def __getitem__(self, idx):
         file_ = self.files[idx]
-        vol_path = os.path.join(self.args.data_dir, f"{file_}.h5")
+        vol_path = os.path.join(self.args.data_dir, f"singlecoil_{self.args.split}/{file_}.h5")
         with h5py.File(vol_path, "r") as f:
             data = f[self.args.inputs][()]
             if self.args.inputs == "kspace" and self.args.input_project == "ifft_preprocess":
