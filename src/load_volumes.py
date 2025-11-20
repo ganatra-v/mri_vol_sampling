@@ -23,12 +23,10 @@ def standardize_volume(data, n_channels=40):
 def fetch_dataloaders(args):
     if args.input_data_format == "volumes":
         train_dataset = VolumeDataset(split="train", args=args)
-        val_dataset = VolumeDataset(split="val", args=args)
-        test_dataset = VolumeDataset(split="test", args=args)
+        test_dataset = VolumeDataset(split="val", args=args)
     elif args.input_data_format in ["slices", "slices+volumes"]:
         train_dataset = SliceDataset(split="train", args=args)
-        val_dataset = SliceDataset(split="val", args=args)
-        test_dataset = SliceDataset(split="test", args=args)
+        test_dataset = SliceDataset(split="val", args=args)
 
     train_loader = DataLoader(
         train_dataset,
@@ -37,12 +35,8 @@ def fetch_dataloaders(args):
         num_workers=4
     )
 
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=8,
-        shuffle=False,
-        num_workers=4
-    )
+    val_loader = train_loader
+
     test_loader = DataLoader(
         test_dataset,
         batch_size=8,
