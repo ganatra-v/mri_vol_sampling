@@ -35,7 +35,7 @@ parser.add_argument("--slice_loss_lam", type=float, default=1.0, help="Weight fo
 parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs.")
 parser.add_argument("--learning_rate", type=float, default=1e-3, help="Learning rate for optimizer.")
 parser.add_argument("--weight_decay", type=float, default=1e-5, help="Weight decay for optimizer.")
-parser.add_argument("--eval_interval", type=int, default=5, help="Interval (in epochs) for evaluation on validation set.")
+parser.add_argument("--eval_only", action="store_true", help="Only perform evaluation without training.")
 
 parser.add_argument("--resume", action="store_true", help="Resume training from the last checkpoint.")
 parser.add_argument("--checkpoint_path", type=str, default="", help="Path to the checkpoint to resume from.")
@@ -98,10 +98,11 @@ if __name__ == "__main__":
     if args.resume and args.checkpoint_path:
         model.load_state_dict(torch.load(args.checkpoint_path))
         logging.info(f"Resumed training from checkpoint: {args.checkpoint_path}")
-
-    model.train_model(train_loader, val_loader)
-    logging.info("loading best model for evaluation..........")
-    model.load_state_dict(torch.load(os.path.join(args.outdir, "best_model.pth")))
+    
+    if not args.eval_only:
+        model.train_model(train_loader, val_loader)
+        logging.info("loading best model for evaluation..........")
+        model.load_state_dict(torch.load(os.path.join(args.outdir, "best_model.pth")))
 
     logging.info("Val set .................................................")
     model.eval()
