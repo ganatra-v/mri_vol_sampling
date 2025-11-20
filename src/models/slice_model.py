@@ -51,7 +51,7 @@ class SliceModel(nn.Module):
         criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([7.5]).cuda())
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
         vol_criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([0.75]).cuda())
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[self.args.epochs // 3 * 2], gamma=0.2)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[self.args.epochs // 4 * 3], gamma=0.2)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         best_acc , best_epoch = 0, -1
@@ -110,7 +110,9 @@ class SliceModel(nn.Module):
                 epoch_loss += total_loss.item()
                 print(f"step {i+1}/{len(trainloader)}, loss: {epoch_loss/(i+1):.4f}")
             acc, prec, rec, f1, roc, sens, spec = self.eval_model(valloader)  # evaluate on validation set each iteration
+            lr = scheduler.get_last_lr()[0]
             scheduler.step()
+
             if acc > best_acc:
                 best_acc = acc
                 best_epoch = epoch + 1
@@ -118,7 +120,7 @@ class SliceModel(nn.Module):
                 logging.info(f"New best model saved at epoch {best_epoch} with accuracy {best_acc:.4f}")
             
             avg_loss = epoch_loss / len(trainloader)
-            logging.info(f"epoch {epoch+1}/{self.args.epochs}, loss: {avg_loss:.4f}")
+            logging.info(f"epoch {epoch+1}/{self.args.epochs}, loss: {avg_loss:.4f}, lr: {lr:.7f}")
         logging.info("Finished Slice Model Training")
         torch.save(self.state_dict(), f"{self.args.outdir}/final_model.pth")
     
