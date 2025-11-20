@@ -92,7 +92,7 @@ class VolumeDataset(Dataset):
     
 
 class SliceDataset(Dataset):
-    def __init__(self, split="train", args=None):
+    def __init__(self, split="train", args=None, mask = None):
         self.args = args
         self.split = split
         if split == "train":
@@ -108,6 +108,9 @@ class SliceDataset(Dataset):
         self.csv_data = csv_data
         self.grouped_data = csv_data.groupby("file")
         self.files = csv_data["file"].unique().tolist()
+
+        self.mask = mask
+        
         
     def __len__(self):
         return len(self.files)
@@ -129,21 +132,28 @@ class SliceDataset(Dataset):
                     center_x - crop_size // 2 : center_x + crop_size // 2,
                     center_y - crop_size // 2 : center_y + crop_size // 2,
                 ]
-            # randomly sampling slices based on vol_sampling_fraction
-            n_slices = data.shape[0]
-            n_sampled_slices = max(1, int(n_slices * self.args.vol_sampling_fraction))
-            sampled_indices = np.sort(np.random.choice(n_slices, n_sampled_slices, replace=False))
-            # zero out non-sampled slices
-            mask = np.zeros(n_slices, dtype=bool)
-            mask[sampled_indices] = True
+
+            data = standardize_volume(data, n_channels=50)            
+
+            if self.mask is None:
+                # randomly sampling slices based on vol_sampling_fraction            
+                n_slices = data.shape[0]
+                n_sampled_slices = max(1, int(n_slices * self.args.vol_sampling_fraction))
+                sampled_indices = np.sort(np.random.choice(n_slices, n_sampled_slices, replace=False))
+                # zero out non-sampled slices
+                mask = np.zeros(n_slices, dtype=bool)
+                mask[sampled_indices] = True
+            else:
+                mask = self.mask
+
             data[~mask, :, :] = 0
-            data = standardize_volume(data, n_channels=50)
+
     
 
         
         volume = torch.tensor(data, dtype=torch.float32)
         labels = self.grouped_data.get_group(file_)["meniscus_tear"].values
-        labels[~mask] = 0  # set labels of non-sampled slices to 0
+
         diff = volume.shape[0] - len(labels)
         if diff > 0:
             if diff % 2 == 0:
@@ -154,7 +164,7 @@ class SliceDataset(Dataset):
                 pad_after = diff // 2 + 1
             labels = np.pad(labels, (pad_before, pad_after), mode='constant')
         
-
+        labels[~mask] = 0  # set labels of non-sampled slices to 0
         label = torch.tensor(labels, dtype=torch.float32)
 
         # randomly rotate volume for data augmentation

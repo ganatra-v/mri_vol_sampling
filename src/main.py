@@ -23,6 +23,8 @@ parser.add_argument("--slice_sampling_fraction", type=float, default=0.1, help="
 parser.add_argument("--vol_sampling_fraction", type=float, default=0.5, help="Fraction of volumes to sample.")
 parser.add_argument("--n_channels", type=int, default=1, help="Number of channels in the input data.")
 parser.add_argument("--save_topk_indices", action="store_true", help="Save top-k slice indices based on attention weights.")
+parser.add_argument("--topk", type=int, default=5, help="Number of top slices to save based on attention weights.")
+parser.add_argument("--n_masks_eval", type=int, default=150, help="Number of random masks to sample during evaluation.")
 
 parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility.")
 
@@ -53,6 +55,17 @@ def setup_outdir(args):
     os.makedirs(outdir, exist_ok=True)
     return outdir
 
+def sample_masks(n_masks, vol_size = 50, sampling_fraction=0.5):
+    masks = []
+    for _ in range(n_masks):
+        n_slices = vol_size
+        n_sampled_slices = max(1, int(n_slices * sampling_fraction))
+        sampled_indices = np.sort(np.random.choice(n_slices, n_sampled_slices, replace=False))
+        # zero out non-sampled slices
+        mask = np.zeros(n_slices, dtype=bool)
+        mask[sampled_indices] = True
+        masks.append(mask)
+    return masks
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -98,3 +111,23 @@ if __name__ == "__main__":
     model.eval()
     model.eval_model(test_loader, save_topk_slices=args.save_topk_indices, save_preds=True)
     logging.info("Training and evaluation completed.")
+
+    if args.vol_sampling_fraction < 1.0:
+        # sample multiple masks and compute val performance for each
+        logging.info("Evaluating multiple volume sampling masks ................")
+        n_masks = args.n_masks_eval
+        masks = sample_masks(n_masks, vol_size=50, sampling_fraction=args.vol_sampling_fraction)
+        val_accuracies = []
+        for i, mask in enumerate(masks):
+            _, val_loader_masked = fetch_dataloaders(args, mask=mask)
+            logging.info(f"Evaluating mask {i+1}/{n_masks} ................")
+            val_acc = model.eval_model(val_loader_masked, save_topk_slices=False, save_preds=False)
+            val_accuracies.append(val_acc)
+
+        max_acc_idx = np.argmax(val_accuracies)
+        logging.info(f"Best mask index: {max_acc_idx} with val accuracy: {val_accuracies[max_acc_idx]}")
+        best_mask = masks[max_acc_idx]
+        # evaluate on test set with best mask
+        _, test_loader_best_mask = fetch_dataloaders(args, mask=best_mask)
+        logging.info("Evaluating best mask on test set ....................")
+        model.eval_model(test_loader_best_mask, save_topk_slices=False, save_preds=True)
