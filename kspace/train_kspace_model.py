@@ -6,6 +6,7 @@ import torch
 import logging
 from load_data import fetch_dataloaders
 from models.kspace_model import KSpaceModel
+from models.slice_model import SliceModel
 
 parser = argparse.ArgumentParser(description="MRI Volume Sampling")
 parser.add_argument("--dataset", type=str, choices=["knee"], required=True, help="Dataset to use. Currently only 'knee' is supported.")
@@ -82,10 +83,16 @@ if __name__ == "__main__":
     # fetch dataloaders
     train_loader, val_loader, test_loader = fetch_dataloaders(args)
 
-    if args.input_data_format == "volumes":
-        raise NotImplementedError("VolumeModel is not implemented yet.")
-    elif args.input_data_format in ["slices", "slices+volumes"]:
-        model = KSpaceModel(args)
+    if args.inputs == "kspace":
+        if args.input_data_format == "volumes":
+            raise NotImplementedError("VolumeModel is not implemented yet.")
+        elif args.input_data_format in ["slices", "slices+volumes"]:
+            model = KSpaceModel(args)
+    else:
+        if args.input_data_format == "volumes":
+            raise NotImplementedError("VolumeModel is not implemented yet.")
+        elif args.input_data_format in ["slices", "slices+volumes"]:
+            model = SliceModel(args)
 
     model = model.cuda() if torch.cuda.is_available() else model
 
