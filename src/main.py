@@ -88,10 +88,16 @@ if __name__ == "__main__":
     # fetch dataloaders
     train_loader, val_loader, test_loader = fetch_dataloaders(args)
 
-    if args.input_data_format == "volumes":
-        model = VolClsModel(args)
-    elif args.input_data_format in ["slices", "slices+volumes"]:
-        model = SliceModel(args)
+    if args.inputs == "reconstruction_esc":
+        if args.input_data_format == "volumes":
+            model = VolClsModel(args)
+        elif args.input_data_format in ["slices", "slices+volumes"]:
+            model = SliceModel(args)
+    elif args.inputs == "kspace":
+        model = KSpaceModel(args)
+    else:
+        raise NotImplementedError(f"Input type {args.inputs} not implemented.")
+
 
     model = model.cuda() if torch.cuda.is_available() else model
 
