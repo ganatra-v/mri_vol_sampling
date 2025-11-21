@@ -142,6 +142,8 @@ class SliceDataset(Dataset):
 
         
         volume = torch.tensor(data, dtype=torch.float32)
+        if self.args.inputs == "kspace":
+            volume = torch.view_as_complex(volume)
         labels = self.grouped_data.get_group(file_)["meniscus_tear"].values
 
         diff = volume.shape[0] - len(labels)

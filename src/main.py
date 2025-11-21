@@ -7,6 +7,7 @@ import logging
 from load_volumes import fetch_dataloaders
 from models.vol_cls_model import VolClsModel
 from models.slice_model import SliceModel
+from models.kspace_model import KSpaceModel
 
 parser = argparse.ArgumentParser(description="MRI Volume Sampling")
 parser.add_argument("--dataset", type=str, choices=["knee"], required=True, help="Dataset to use. Currently only 'knee' is supported.")
