@@ -13,7 +13,6 @@ parser.add_argument("--dataset", type=str, choices=["knee"], required=True, help
 parser.add_argument("--data_dir", type=str, required=True, help="Path to the dataset directory.")
 parser.add_argument("--train_file", type=str, required=True, help="CSV file listing training files.")
 parser.add_argument("--val_file", type=str, required=True, help="CSV file listing validation files.")
-parser.add_argument("--test_file", type=str, required=True, help="CSV file listing test files.")
 parser.add_argument("--output_dir", type=str, required=True, help="Directory to save outputs.")
 
 parser.add_argument("--inputs", type=str, choices=["kspace", "reconstruction_esc", "reconstruction_rss"], default="kspace", help="Type of input data.")
@@ -35,6 +34,7 @@ parser.add_argument("--slice_loss_lam", type=float, default=1.0, help="Weight fo
 parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs.")
 parser.add_argument("--learning_rate", type=float, default=1e-3, help="Learning rate for optimizer.")
 parser.add_argument("--weight_decay", type=float, default=1e-5, help="Weight decay for optimizer.")
+parser.add_argument("--milestones", type=str, default="10,25,50", help="Epochs at which to decay learning rate, comma-separated.")
 parser.add_argument("--eval_only", action="store_true", help="Only perform evaluation without training.")
 
 parser.add_argument("--resume", action="store_true", help="Resume training from the last checkpoint.")

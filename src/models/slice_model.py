@@ -51,7 +51,8 @@ class SliceModel(nn.Module):
         criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([7.5]).cuda())
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
         vol_criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([0.75]).cuda())
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[self.args.epochs // 4 * 3], gamma=0.2)
+        milestones = [int(milestone) for milestone in self.args.milestones.split(",")]
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.1)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         best_acc , best_epoch = 0, -1

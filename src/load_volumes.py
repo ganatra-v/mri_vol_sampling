@@ -53,8 +53,6 @@ class VolumeDataset(Dataset):
             file = args.train_file
         elif split == "val":
             file = args.val_file
-        elif split == "test":
-            file = args.test_file
         else:
             raise ValueError("Invalid split name")
         csv_data = pd.read_csv(file)
@@ -93,8 +91,6 @@ class SliceDataset(Dataset):
             file = args.train_file
         elif split == "val":
             file = args.val_file
-        elif split == "test":
-            file = args.test_file
         else:
             raise ValueError("Invalid split name")
         csv_data = pd.read_csv(file)
