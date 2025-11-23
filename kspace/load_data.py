@@ -68,8 +68,6 @@ class VolumeDataset(Dataset):
         files = csv_data["file"].tolist()
         self.files = files
         self.labels = csv_data["meniscus_tear"].values
-
-
     
     def __len__(self):
         return len(self.labels)
@@ -78,9 +76,10 @@ class VolumeDataset(Dataset):
         file_ = self.files[idx]
         label = self.labels[idx]
         
-        vol_path = os.path.join(self.args.data_dir, f"singlecoin_{self.split}", f"{file_}_{self.args.inputs}.pt")
+        vol_path = os.path.join(self.args.data_dir, f"singlecoil_{self.split}", f"{file_}_{self.args.inputs}.pt")
         # load as complex data
         volume = torch.load(vol_path)
+        volume = standardize_volume(volume, n_channels=self.args.n_slices_per_volume)
         label = torch.tensor(label, dtype=torch.float32)
 
         # randomly rotate volume for data augmentation
