@@ -1,80 +1,86 @@
 import torch
 import torch.nn as nn
-from .fft_conv import FFTConv2d
 from torchvision.models import resnet18, resnet34, resnet50
-import h5py
 import logging
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
+import torch.nn.functional as F
 
-class KSpaceModel(nn.Module):
+class KSpaceNet(nn.Module):
     def __init__(self, args):
-        super(KSpaceModel, self).__init__()
+        super(KSpaceNet, self).__init__()
         self.args = args
-        
         if args.arch == "resnet18":
-            self.model = resnet18(weights="IMAGENET1K_V1" if args.pretrained else None)
+            self.model = resnet18()
         elif args.arch == "resnet34":
-            self.model = resnet34(weights="IMAGENET1K_V1" if args.pretrained else None)
+            self.model = resnet34()
         elif args.arch == "resnet50":
-            self.model = resnet50(weights="IMAGENET1K_V1" if args.pretrained else None)
+            self.model = resnet50()
         
+        self.input_conv = nn.Conv2d(1, 1, kernel_size=5, padding=2, bias=False)
+
+        # Modify the first conv layer to accept n_channels input channels
+        outchannels, kernelsize, stride, padding = self.model.conv1.out_channels, self.model.conv1.kernel_size, self.model.conv1.stride, self.model.conv1.padding
+        self.model.conv1 = nn.Conv2d(args.n_channels, outchannels, kernel_size=kernelsize, stride=stride, padding=padding, bias=False)
         num_ftrs = self.model.fc.in_features
         self.feature_dim = num_ftrs
+        self.model.fc = nn.Identity()  # Remove final classification layer
 
-        self.model.fc = nn.Identity()
-
-        self.kspace_conv = FFTConv2d(1, 1, kernel_size=5, bias=True)
-
-        self.slice_classifier = nn.Linear(num_ftrs, 1)
+        self.slice_classifier = nn.Linear(num_ftrs, 1)  # Binary classification
 
         if args.input_data_format == "slices+volumes":
             self.attention = nn.Sequential(
                 self.slice_classifier,
                 nn.Softmax(dim=0)
-                )
+            )
             self.vol_classifier = nn.Linear(num_ftrs, 1)  # Binary classification
 
-        self.layernorm = nn.LayerNorm(
-            elementwise_affine=False, normalized_shape=(320, 320)
-        )
-
     def slice_forward(self, x):
-
-        kspace = torch.fft.fftshift(
+        # x is (n_batches, n_channels, height, width)
+        # the model expects (n_batches * n_slices, n_channels, height, width)
+        x = torch.fft.fftshift(
             torch.fft.ifftn(torch.fft.ifftshift(x, dim=(-2, -1)), dim=(-2, -1)),
             dim=(-2, -1),
         )
-        kspace = torch.fft.fftn(kspace, dim=(-2, -1))
-        out_complex = self.kspace_conv(kspace)        
-        out_mag = out_complex.abs()
-        
-        out_mag = center_crop(out_mag, (320, 320))
-        out_mag = self.layernorm(out_mag)
-        
-        if out_mag.shape[1] == 1:
-            out = out_mag.repeat(1, 3, 1, 1)
-        else:
-            out = out_mag
+        x = torch.fft.fftn(x, dim=(-2, -1))
+        x = F.pad(x, (3, 3, 3, 3))
+        oushape = x.shape[-2] + 4, x.shape[-1] + 4
+        x = torch.fft.fft2(x, s=oushape)
+        kernel_fft = torch.fft.fft2(self.input_conv.weight, s=oushape)
+        x = x * kernel_fft.conj()
+        x = torch.fft.ifft2(x).real
+        x = x[:, :, :640, :640]  # crop to original size
 
-        out = self.model(out)
-        return self.slice_classifier(out), out  # return logits and features
+        center_x, center_y = x.shape[-2] // 2, x.shape[-1] // 2
+        crop_size = 320
+        x = x[
+            :,
+            :,
+            center_x - crop_size // 2 : center_x + crop_size // 2,
+            ::2
+        ]
+        features = self.model(x)  # (n_batches * n_slices, feature_dim)
+        slice_logits = self.slice_classifier(features)  # (n_batches * n_slices, 1)
 
+        return slice_logits, features
+        
     def vol_forward(self, x):
-        return self.vol_classifier(x)
-
+        x = self.vol_classifier(x)  # (n_batches, 1)
+        return x
+    
     def train_model(self, trainloader, valloader):
         self.train()
-        criterion = nn.BCEWithLogitsLoss()
+        criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([7.5]).cuda())
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
-        vol_criterion = nn.BCEWithLogitsLoss()
+        vol_criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([0.75]).cuda())
         milestones = [int(milestone) for milestone in self.args.milestones.split(",")]
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.1)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        best_acc, best_epoch = 0, -1
+        best_acc , best_epoch = 0, -1
+
         for epoch in range(self.args.epochs):
             self.train()
             epoch_loss = 0.0
@@ -129,7 +135,9 @@ class KSpaceModel(nn.Module):
                 epoch_loss += total_loss.item()
                 print(f"step {i+1}/{len(trainloader)}, loss: {epoch_loss/(i+1):.4f}")
             acc, prec, rec, f1, roc, sens, spec = self.eval_model(valloader)  # evaluate on validation set each iteration
+            lr = scheduler.get_last_lr()[0]
             scheduler.step()
+
             if acc > best_acc:
                 best_acc = acc
                 best_epoch = epoch + 1
@@ -137,10 +145,10 @@ class KSpaceModel(nn.Module):
                 logging.info(f"New best model saved at epoch {best_epoch} with accuracy {best_acc:.4f}")
             
             avg_loss = epoch_loss / len(trainloader)
-            logging.info(f"epoch {epoch+1}/{self.args.epochs}, loss: {avg_loss:.4f}")
+            logging.info(f"epoch {epoch+1}/{self.args.epochs}, loss: {avg_loss:.4f}, lr: {lr:.7f}")
         logging.info("Finished Slice Model Training")
-        torch.save(self.state_dict(), f"{self.args.outdir}/final_model.pth")            
-
+        torch.save(self.state_dict(), f"{self.args.outdir}/final_model.pth")
+    
     def eval_metrics(self, labels, preds, threshold=0.5):
         roc = roc_auc_score(labels, preds)
         bin_preds = (preds >= threshold).astype(int)
@@ -244,42 +252,17 @@ class KSpaceModel(nn.Module):
         return acc, prec, rec, f1, roc, sens, spec
 
 
-
-def center_crop(data, shape) -> torch.Tensor:
-    """
-    Center crop of data. 
-    Args:
-        data: torch.Tensor
-        shape: Tuple[int, int]
-    Returns:
-        torch.Tensor        
-    """    
-    if data.shape[-2:] == shape:
-        return data
-
-    if not (0 < shape[0] <= data.shape[-2] and 0 < shape[1] <= data.shape[-1]):
-        raise ValueError("Invalid shapes.")
-
-    w_from = (data.shape[-2] - shape[0]) // 2
-    h_from = (data.shape[-1] - shape[1]) // 2
-    w_to = w_from + shape[0]
-    h_to = h_from + shape[1]
-
-    return data[..., w_from:w_to, h_from:h_to]
-
 if __name__ == "__main__":
     class Args:
-        def __init__(self):
-            self.arch = "resnet18"
-            self.pretrained = True
-            self.input_data_format = "slices"
+        arch = "resnet18"
+        n_channels = 1
+        input_data_format = "slices+volumes"
     args = Args()
-    model = KSpaceModel(args)
-
-    with h5py.File("../../../file1000891.h5", "r") as f:
-        kspace = f["kspace"][:]
-    kspace = torch.from_numpy(kspace).unsqueeze(1).to(torch.complex64)
-    print(kspace.shape)
-
-    output = model.slice_forward(kspace)
-    print(output)
+    model = KSpaceNet(args)
+    inputs = torch.randn(10, 1, 640, 640)  # batch of 10 slices
+    slice_logits, slice_features = model.slice_forward(inputs)
+    print("Slice logits shape:", slice_logits.shape)
+    print("Slice features shape:", slice_features.shape)
+    vol_logits = model.vol_forward(slice_features[:10])  # batch of 10 volumes
+    print("Volume logits shape:", vol_logits.shape)
+    print(slice_logits, vol_logits)
