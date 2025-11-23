@@ -8,9 +8,9 @@ import numpy as np
 import pandas as pd
 import torch.nn.functional as F
 
-class KSpaceNet(nn.Module):
+class KSpaceModel(nn.Module):
     def __init__(self, args):
-        super(KSpaceNet, self).__init__()
+        super(KSpaceModel, self).__init__()
         self.args = args
         if args.arch == "resnet18":
             self.model = resnet18()
